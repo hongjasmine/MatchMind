@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+langgraph
+langchain-google-genai
+langchain-core
+httpx
+redis
+motor
+pymongo
+python-dotenv
+pydantic
+pydantic-settings
+tenacity

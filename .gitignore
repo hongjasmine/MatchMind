@@ -1,0 +1,11 @@
+venv/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+*.egg-info/
+.pytest_cache/
+redis_test.py
+redis_check.py
+gemini_test.py
+langchain_test.py
