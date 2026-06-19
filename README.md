@@ -80,9 +80,10 @@ EXISTENCE claims skip Gemini entirely and are answered directly from fetched mat
 ## Setup
 
 ```bash
+# Requires Python 3.11+
 git clone https://github.com/hongjasmine/MatchMind
-cd matchmind
-python -m venv venv && source venv/bin/activate
+cd MatchMind
+python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
 # Fill in: GOOGLE_API_KEY, FOOTBALL_DATA_API_KEY, MONGODB_URI, REDIS_URL
