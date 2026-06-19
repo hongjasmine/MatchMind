@@ -1,3 +1,5 @@
+**Live demo:** https://matchmindd.streamlit.app
+
 # MatchMind 🎯
 
 **Live sports argument verification agent for the 2026 FIFA World Cup.**
@@ -106,7 +108,13 @@ python main.py
 # Start the frontend (separate terminal)
 streamlit run streamlit_app.py
 # → http://localhost:8501
+
+# Live demo (deployed)
+# → https://matchmindd.streamlit.app
 ```
+
+
+
 
 ---
 
