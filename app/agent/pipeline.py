@@ -20,11 +20,15 @@ genai.configure(api_key=settings.google_api_key)
 
 COMMON_TEAMS = [
     "brazil", "france", "argentina", "germany", "spain",
-    "england", "portugal", "usa", "united states", "mexico", "japan",
+    "england", "portugal", "usa", "us", "united states", "mexico", "japan",
     "netherlands", "italy", "croatia", "senegal", "morocco", "australia",
 ]
 
-TEAM_ALIASES = {"usa": "united states", "united states": "usa"}
+TEAM_ALIASES = {
+    "usa": "united states",
+    "us": "united states",
+    "united states": "usa",
+}
 
 EXISTENCE_PATTERNS = [
     "is playing", "are playing", "playing today", "playing right now",

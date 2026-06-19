@@ -288,7 +288,7 @@ p, span,
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 
-BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+BACKEND_URL = os.getenv("BACKEND_URL", "https://web-production-5bbd2.up.railway.app")
 
 EXAMPLE_CLAIMS = [
     "Brazil is winning their match right now",
@@ -471,8 +471,9 @@ for i, example in enumerate(EXAMPLE_CLAIMS):
 # ─── Verdict ──────────────────────────────────────────────────────────────────
 
 if submit and claim and claim.strip():
+    claim = claim.strip()
     with st.spinner("Checking live data…"):
-        result = verify_claim(claim.strip())
+        result = verify_claim(claim)
 
     if not result["ok"]:
         st.error(f"⚠️ {result['error']}")
