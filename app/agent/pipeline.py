@@ -77,6 +77,27 @@ def _find_relevant_match(matches: list, mentioned_teams: list[str]) -> dict | No
     return None
 
 
+def _extract_json(text: str) -> dict:
+    """Parse JSON from Gemini response, tolerating thinking-model preamble."""
+    text = text.strip()
+    # Direct parse first
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    # Strip markdown fences
+    cleaned = re.sub(r"```json?\n?|```", "", text).strip()
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+    # Extract the first {...} block — handles thinking preamble
+    match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+    if match:
+        return json.loads(match.group())
+    raise ValueError(f"No JSON object found in response: {text[:200]}")
+
+
 def _clean_citations(citations: list) -> list[str]:
     cleaned = []
     for c in citations:
@@ -268,7 +289,15 @@ async def verdict_node(state: AgentState) -> AgentState:
         response = await model.generate_content_async(user_prompt)
         t2 = time.time()
         print(f"[TIMING] gemini response: {(t2-t1)*1000:.1f}ms")
-        raw = response.text
+
+        # gemini-2.5-flash is a thinking model — extract text from the non-thinking part
+        raw = ""
+        if response.candidates:
+            for part in response.candidates[0].content.parts:
+                if not getattr(part, "thought", False):
+                    raw += part.text
+        raw = raw.strip() or response.text
+        print(f"[RAW] {repr(raw[:300])}")
 
         if hasattr(response, "usage_metadata") and response.usage_metadata:
             token_usage = {
@@ -284,7 +313,7 @@ async def verdict_node(state: AgentState) -> AgentState:
                 f"total={token_usage['total_tokens']}"
             )
 
-        parsed = json.loads(raw)
+        parsed = _extract_json(raw)
         citations = _clean_citations(parsed.get("citations", []))
 
         print(f"[TIMING] verdict_node total: {(time.time()-t0)*1000:.1f}ms")
@@ -295,28 +324,24 @@ async def verdict_node(state: AgentState) -> AgentState:
             "token_usage": token_usage,
         }
 
-    except json.JSONDecodeError:
-        cleaned = re.sub(r"```json?\n?|```", "", raw).strip()
-        try:
-            parsed = json.loads(cleaned)
-            citations = _clean_citations(parsed.get("citations", []))
-            return {
-                **state, "raw_verdict": raw,
-                "verdict": parsed["verdict"], "confidence": float(parsed["confidence"]),
-                "explanation": parsed["explanation"], "citations": citations,
-                "token_usage": token_usage,
-            }
-        except Exception as inner_e:
-            return {
-                **state, "raw_verdict": raw, "verdict": "INSUFFICIENT_DATA",
-                "confidence": 0.0, "explanation": "Could not parse the verdict. Please try again.",
-                "citations": [], "token_usage": token_usage, "error": str(inner_e),
+    except (json.JSONDecodeError, KeyError, ValueError) as e:
+        print(f"[ERROR] parse failed: {e} — raw: {repr(raw[:300])}")
+        return {
+            **state, "raw_verdict": raw, "verdict": "INSUFFICIENT_DATA",
+            "confidence": 0.0, "explanation": "Could not parse the verdict. Please try again.",
+            "citations": [], "token_usage": token_usage, "error": str(e),
             }
     except Exception as e:
+        err = str(e)
+        if "429" in err or "quota" in err.lower() or "rate" in err.lower():
+            explanation = "Gemini rate limit reached — free tier allows 20 requests/day. Try again tomorrow or upgrade your API key."
+        else:
+            explanation = "Error contacting AI service."
+        print(f"[ERROR] verdict_node: {err[:200]}")
         return {
             **state, "verdict": "INSUFFICIENT_DATA", "confidence": 0.0,
-            "explanation": "Error contacting AI service.", "citations": [],
-            "token_usage": token_usage, "error": str(e),
+            "explanation": explanation, "citations": [],
+            "token_usage": token_usage, "error": err,
         }
 
 
