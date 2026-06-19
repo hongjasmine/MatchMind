@@ -16,7 +16,7 @@ st.set_page_config(
     page_title="MatchMind",
     page_icon="🎯",
     layout="centered",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed",
 )
 
 # ─── Styling ─────────────────────────────────────────────────────────────────
@@ -36,7 +36,6 @@ html, body, [class*="css"] {
 
 /* Hide Streamlit chrome */
 #MainMenu, footer, header { visibility: hidden; }
-[data-testid="collapsedControl"] { visibility: visible !important; }
 .block-container { padding-top: 2rem; padding-bottom: 2rem; max-width: 720px; }
 
 /* Header */
@@ -264,16 +263,6 @@ html, body, [class*="css"] {
     margin-top: 1.5rem;
 }
 
-/* Sidebar */
-[data-testid="stSidebar"] { background-color: #ffffff !important; }
-[data-testid="stSidebar"] *,
-[data-testid="stSidebar"] [data-testid="stMetricLabel"],
-[data-testid="stSidebar"] [data-testid="stMetricValue"],
-[data-testid="stSidebar"] [data-testid="stMetricDelta"],
-[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p,
-[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
-[data-testid="stSidebar"] small,
-[data-testid="stSidebar"] label { color: #000000 !important; }
 
 /* Native Streamlit component text */
 h1, h2, h3, h4, h5, h6,
@@ -353,54 +342,6 @@ def get_live_matches() -> dict:
         return {}
 
 
-# ─── Sidebar: eval summary ───────────────────────────────────────────────────
-
-with st.sidebar:
-    st.markdown("### MatchMind Stats")
-    summary = get_summary()
-
-    if not summary or summary.get("total_verdicts", 0) == 0:
-        st.caption("No verdicts stored yet.")
-    else:
-        n = summary["total_verdicts"]
-        st.metric("Total verdicts", n)
-
-        st.markdown("**Latency**")
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Avg", f"{summary['avg_latency_ms']:.0f}ms")
-        c2.metric("p50", f"{summary['p50_latency_ms']:.0f}ms")
-        c3.metric("p95", f"{summary['p95_latency_ms']:.0f}ms")
-
-        st.metric("Avg tokens / LLM call", f"{summary['avg_total_tokens']:.0f}")
-
-        st.markdown("**Eval scores**")
-        st.metric("Overall", f"{summary['avg_eval_score']:.3f}")
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Citation", f"{summary['avg_citation_score']:.2f}")
-        c2.metric("Position", f"{summary['avg_position_score']:.2f}")
-        c3.metric("Concision", f"{summary['avg_concision_score']:.2f}")
-
-        dist = summary.get("verdict_distribution", {})
-        if dist:
-            st.markdown("**Verdict distribution**")
-            for label, emoji in [
-                ("SUPPORTED", "✅"),
-                ("REFUTED", "❌"),
-                ("PARTIALLY_SUPPORTED", "⚠️"),
-                ("INSUFFICIENT_DATA", "❓"),
-            ]:
-                count = dist.get(label, 0)
-                pct = round(count / n * 100)
-                st.markdown(f"{emoji} {label.replace('_', ' ')}  \n`{count}` ({pct}%)")
-
-        flags = summary.get("flag_counts", {})
-        if flags:
-            st.markdown("**Quality flags**")
-            for flag, count in sorted(flags.items(), key=lambda x: -x[1]):
-                st.markdown(f"`{flag}` — {count}")
-
-    if st.button("Refresh", use_container_width=True):
-        st.rerun()
 
 # ─── Header ──────────────────────────────────────────────────────────────────
 
@@ -532,6 +473,51 @@ if submit and claim and claim.strip():
 
 elif submit and not (claim and claim.strip()):
     st.warning("Enter a claim to verify.")
+
+# ─── Stats expander ──────────────────────────────────────────────────────────
+
+with st.expander("📊 MatchMind Stats", expanded=False):
+    summary = get_summary()
+    if not summary or summary.get("total_verdicts", 0) == 0:
+        st.caption("No verdicts stored yet.")
+    else:
+        n = summary["total_verdicts"]
+        st.metric("Total verdicts", n)
+
+        st.markdown("**Latency**")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Avg", f"{summary['avg_latency_ms']:.0f}ms")
+        c2.metric("p50", f"{summary['p50_latency_ms']:.0f}ms")
+        c3.metric("p95", f"{summary['p95_latency_ms']:.0f}ms")
+
+        st.metric("Avg tokens / LLM call", f"{summary['avg_total_tokens']:.0f}")
+
+        st.markdown("**Eval scores**")
+        st.metric("Overall", f"{summary['avg_eval_score']:.3f}")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Citation", f"{summary['avg_citation_score']:.2f}")
+        c2.metric("Position", f"{summary['avg_position_score']:.2f}")
+        c3.metric("Concision", f"{summary['avg_concision_score']:.2f}")
+
+        dist = summary.get("verdict_distribution", {})
+        if dist:
+            st.markdown("**Verdict distribution**")
+            for label, emoji in [
+                ("SUPPORTED", "✅"), ("REFUTED", "❌"),
+                ("PARTIALLY_SUPPORTED", "⚠️"), ("INSUFFICIENT_DATA", "❓"),
+            ]:
+                count = dist.get(label, 0)
+                pct = round(count / n * 100)
+                st.markdown(f"{emoji} {label.replace('_', ' ')} — `{count}` ({pct}%)")
+
+        flags = summary.get("flag_counts", {})
+        if flags:
+            st.markdown("**Quality flags**")
+            for flag, count in sorted(flags.items(), key=lambda x: -x[1]):
+                st.markdown(f"`{flag}` — {count}")
+
+        if st.button("Refresh stats", use_container_width=True):
+            st.rerun()
 
 # ─── Footer ──────────────────────────────────────────────────────────────────
 
