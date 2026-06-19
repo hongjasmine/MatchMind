@@ -3,6 +3,7 @@ MatchMind Streamlit Frontend
 Live sports argument verification for the 2026 FIFA World Cup.
 """
 
+import os
 import streamlit as st
 import httpx
 import asyncio
@@ -287,7 +288,7 @@ p, span,
 
 # ─── Config ───────────────────────────────────────────────────────────────────
 
-BACKEND_URL = "http://localhost:8000"
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
 EXAMPLE_CLAIMS = [
     "Brazil is winning their match right now",

@@ -3,6 +3,7 @@ uvicorn[standard]
 langgraph
 langchain-google-genai
 langchain-core
+google-generativeai
 httpx
 redis
 motor
@@ -11,3 +12,4 @@ python-dotenv
 pydantic
 pydantic-settings
 tenacity
+streamlit
