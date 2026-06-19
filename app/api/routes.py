@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from app.agent.pipeline import run_agent
 from app.mcp_server.tools import get_live_matches, get_match_details
 from app.mcp_server.cache import cached_tool_call
-from app.api.storage import store_verdict, get_recent_verdicts
+from app.api.storage import store_verdict, get_recent_verdicts, get_verdict_summary
 from app.evals.framework import evaluate_verdict
 from app.config import get_settings
 
@@ -130,3 +130,8 @@ async def match_details(match_id: int):
 @app.get("/evals/recent")
 async def recent_evals(limit: int = 20):
     return await get_recent_verdicts(limit)
+
+
+@app.get("/evals/summary")
+async def evals_summary():
+    return await get_verdict_summary()

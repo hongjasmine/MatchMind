@@ -17,42 +17,65 @@ User claim
 FastAPI gateway (/verify)
     │
     ▼
-LangGraph 3-node agent
-  ┌─────────────────────────────────────┐
-  │  [fetch] → [verdict] → [format]     │
-  └─────────────────────────────────────┘
-       │            │            │
-       ▼            ▼            ▼
-  MCP server    Gemini 2.5   Shareable
-  (football-    Flash LLM    card JSON
-  data.org)
-       │                         │
-       ▼                         ▼
-  Redis cache              MongoDB Atlas
-  (Upstash)                (verdict store)
+LangGraph 5-node agent
+  ┌──────────────────────────────────────────────────────────┐
+  │  [classify] → [fetch] → [existence_verdict]  → [format]  │
+  │                       ↘ [verdict (Gemini)]  ↗            │
+  └──────────────────────────────────────────────────────────┘
+       │            │              │                  │
+       ▼            ▼              ▼                  ▼
+  3-tier       MCP server     No LLM call        Shareable
+  routing      (football-     (EXISTENCE)        card JSON
+               data.org)      Gemini 2.5
+                              Flash (others)
+       │                                              │
+       ▼                                              ▼
+  Redis cache                                   MongoDB Atlas
+  (Upstash)                                     (verdict store)
 ```
+
+### Claim routing tiers
+
+Before fetching any data, a `classify_node` routes every claim into one of three tiers:
+
+| Tier | Trigger | Gemini called? | Context sent | Typical tokens |
+|---|---|---|---|---|
+| `EXISTENCE` | "is playing", "playing today", "has a match" | No | — | 0 |
+| `SIMPLE_STAT` | "score", "winning", "losing", "scored", "goal" | Yes | live matches + match details only | ~300–500 |
+| `COMPLEX` | standings, comparisons, predictions | Yes | full context + standings | ~800–1500 |
+
+EXISTENCE claims skip Gemini entirely and are answered directly from fetched match data (~100–200 ms vs ~2–3 s).
+
+---
 
 ## Agent Engineering Coverage
 
 | Capability | Implementation |
 |---|---|
 | **Agent/harness engineering** | LangGraph `StateGraph` with typed `AgentState` flowing through all nodes |
-| **Retrieval engineering** | `fetch_node` — intelligent MCP tool selection based on claim content |
-| **Prompt/context engineering** | `verdict_node` — structured system prompt + JSON-forced output schema |
+| **Claim routing / classification** | `classify_node` — keyword-based 3-tier routing (EXISTENCE → SIMPLE_STAT → COMPLEX) before any fetch |
+| **Retrieval engineering** | `fetch_node` — fetches only what the tier needs (no standings for EXISTENCE/SIMPLE_STAT) |
+| **Prompt/context engineering** | `verdict_node` — structured system prompt + JSON-forced output; SIMPLE_STAT strips context to relevant match only |
 | **Tools and skills (MCP)** | Custom MCP server wrapping football-data.org: `get_live_matches`, `get_match_details`, `get_team_standings` |
 | **Evals and benchmarking** | Deterministic eval framework: citation score, position score, concision score — stored with every verdict |
-| **LangGraph** | 3-node compiled graph with async nodes, typed state, `END` edge |
-| **API gateways/routing** | FastAPI with `/verify`, `/matches/live`, `/evals/recent` — Redis-cached MCP passthrough |
+| **LangGraph** | 5-node compiled graph with conditional edges, async nodes, typed state |
+| **API gateways/routing** | FastAPI with `/verify`, `/matches/live`, `/evals/recent`, `/evals/summary` — Redis-cached MCP passthrough |
+| **Observability** | `GET /evals/summary` aggregates total verdicts, avg/p50/p95 latency, avg tokens per LLM call, eval score breakdown, verdict distribution, flag counts from MongoDB |
+| **Frontend** | Streamlit UI with live match ticker, verdict card, tier/token/latency/eval metrics, and live observability sidebar |
+
+---
 
 ## Stack
 
 - **Backend**: FastAPI + Python 3.11
-- **Agent**: LangGraph (fetch → verdict → format)
+- **Agent**: LangGraph (classify → fetch → verdict/existence_verdict → format)
 - **LLM**: Gemini 2.5 Flash
 - **Live data**: football-data.org (free tier)
 - **Cache**: Redis via Upstash (free tier, 30s TTL)
 - **Storage**: MongoDB Atlas (free tier)
-- **Deployment**: Railway → GCP Cloud Run
+- **Frontend**: Streamlit
+
+---
 
 ## Setup
 
@@ -75,10 +98,16 @@ cp .env.example .env
 # Run smoke tests (no API keys needed)
 python tests/test_smoke.py
 
-# Start the server
+# Start the backend
 python main.py
 # → http://localhost:8000/docs
+
+# Start the frontend (separate terminal)
+streamlit run streamlit_app.py
+# → http://localhost:8501
 ```
+
+---
 
 ## Usage
 
@@ -98,6 +127,12 @@ Response:
   "citations": ["France: 8 goals for", "Argentina: 6 goals for"],
   "share_text": "✅ \"France has scored more...\" → SUPPORTED (87% confidence) | MatchMind #WC2026",
   "latency_ms": 1840,
+  "token_usage": {
+    "tier": "COMPLEX",
+    "prompt_tokens": 912,
+    "completion_tokens": 88,
+    "total_tokens": 1000
+  },
   "eval_scores": {
     "citation_score": 0.85,
     "position_score": 0.97,
@@ -108,6 +143,8 @@ Response:
 }
 ```
 
+---
+
 ## MCP Tools
 
 | Tool | Description |
@@ -116,27 +153,61 @@ Response:
 | `get_match_details(match_id)` | Lineups, goals, bookings for a specific match |
 | `get_team_standings(team_name)` | Group table position and stats for a team |
 
+---
+
 ## Eval Framework
 
-Every verdict is scored on three dimensions:
+Every verdict is scored on three deterministic dimensions (no LLM, runs in microseconds):
 
-- **Citation score** (40% weight) — did the verdict cite specific data points with numbers?
-- **Position score** (40% weight) — did the agent take a clear, confident stance?
-- **Concision score** (20% weight) — is the explanation 15-40 words (right for live-match use)?
+| Dimension | Weight | What it checks |
+|---|---|---|
+| **Citation score** | 40% | Did the verdict cite specific data points? Penalized if claim is stat-based but citations contain no numbers. |
+| **Position score** | 40% | Did the agent take a clear, confident stance? SUPPORTED/REFUTED score higher than INSUFFICIENT_DATA. |
+| **Concision score** | 20% | Is the explanation 15–40 words? Too brief (≤10) or too verbose (>60) both lose points. |
 
-Scores are stored in MongoDB and accessible at `GET /evals/recent`.
+Scores are stored in MongoDB and accessible at `GET /evals/recent`. The Streamlit UI shows the overall score live with each verdict.
 
-## Deployment (Railway)
+### Aggregate observability — `GET /evals/summary`
 
-```bash
-# Install Railway CLI
-npm install -g @railway/cli
-railway login
-railway init
-railway up
+```json
+{
+  "total_verdicts": 42,
+  "avg_latency_ms": 2140.0,
+  "p50_latency_ms": 1980.0,
+  "p95_latency_ms": 4200.0,
+  "avg_total_tokens": 1649,
+  "avg_eval_score": 0.81,
+  "avg_citation_score": 0.78,
+  "avg_position_score": 0.91,
+  "avg_concision_score": 0.95,
+  "verdict_distribution": {
+    "SUPPORTED": 18, "REFUTED": 9,
+    "PARTIALLY_SUPPORTED": 7, "INSUFFICIENT_DATA": 8
+  },
+  "flag_counts": {
+    "CITATIONS_LACK_NUMBERS": 5,
+    "INSUFFICIENT_DATA_VERDICT": 8
+  }
+}
 ```
 
-Set env vars in Railway dashboard → match your `.env` file.
+`avg_total_tokens` excludes EXISTENCE-tier calls (0 tokens) to give a meaningful per-LLM-call cost baseline. `avg_eval_score` is always consistent with the three sub-scores: `citation×0.40 + position×0.40 + concision×0.20`.
+
+---
+
+## Token efficiency by tier
+
+Terminal output for every request:
+```
+[ROUTING] tier=EXISTENCE  (0.1ms)
+# → 0 tokens, ~150ms total
+
+[TOKENS] tier=SIMPLE_STAT  prompt=312  completion=87  total=399
+# → ~400 tokens, ~1.2s total
+
+[TOKENS] tier=COMPLEX  prompt=912  completion=88  total=1000
+# → ~1000 tokens, ~2.5s total
+```
 
 ---
 
