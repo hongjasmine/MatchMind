@@ -36,6 +36,7 @@ html, body, [class*="css"] {
 
 /* Hide Streamlit chrome */
 #MainMenu, footer, header { visibility: hidden; }
+[data-testid="collapsedControl"] { visibility: visible !important; }
 .block-container { padding-top: 2rem; padding-bottom: 2rem; max-width: 720px; }
 
 /* Header */
