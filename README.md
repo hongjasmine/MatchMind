@@ -2,7 +2,7 @@
 
 **Live sports argument verification agent for the 2026 FIFA World Cup.**
 
-Drop a sports claim during a live match → get a data-backed verdict in under 3 seconds with a shareable card.
+Drop a sports claim during a live match → get a data-backed verdict (p50 ~2.6s) with a shareable card.
 
 > *"Brazil is going to win this game"* → ❌ REFUTED (78% confidence) — Brazil are currently losing 0-2 in the 67th minute.
 
@@ -80,7 +80,7 @@ EXISTENCE claims skip Gemini entirely and are answered directly from fetched mat
 ## Setup
 
 ```bash
-git clone https://github.com/yourusername/matchmind
+git clone https://github.com/hongjasmine/MatchMind
 cd matchmind
 python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
@@ -171,15 +171,15 @@ Scores are stored in MongoDB and accessible at `GET /evals/recent`. The Streamli
 
 ```json
 {
-  "total_verdicts": 42,
-  "avg_latency_ms": 2140.0,
-  "p50_latency_ms": 1980.0,
-  "p95_latency_ms": 4200.0,
-  "avg_total_tokens": 1649,
-  "avg_eval_score": 0.81,
-  "avg_citation_score": 0.78,
-  "avg_position_score": 0.91,
-  "avg_concision_score": 0.95,
+  "total_verdicts": 57,
+  "avg_latency_ms": 2662.3,
+  "p50_latency_ms": 2559.4,
+  "p95_latency_ms": 6521.4,
+  "avg_total_tokens": 1268.6,
+  "avg_eval_score": 0.605,
+  "avg_citation_score": 0.409,
+  "avg_position_score": 0.682,
+  "avg_concision_score": 0.841,
   "verdict_distribution": {
     "SUPPORTED": 18, "REFUTED": 9,
     "PARTIALLY_SUPPORTED": 7, "INSUFFICIENT_DATA": 8
